@@ -1,6 +1,14 @@
-def main():
-    print("Hello from chatgpt-clone!")
+import streamlit as st
 
+if "is_admin" not in st.session_state:
+    st.session_state["is_admin"] = False
 
-if __name__ == "__main__":
-    main()
+st.header("Hello!")
+
+name = st.text_input("What is your name?")
+
+if name:
+    st.write(f"Hello {name}")
+    st.session_state["is_admin"] = True
+
+print(st.session_state["is_admin"])
