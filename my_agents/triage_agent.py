@@ -7,19 +7,21 @@ from agents import (
     GuardrailFunctionOutput,
     handoff,
 )
-from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX # handoff 사용시 권장 프롬프트 from 공식문서
+from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
 from agents.extensions import handoff_filters
-from models import UserAccountContext, InputGuardRailOutput, HandoffData
-from my_agents.account_agent import account_agent
-from my_agents.technical_agent import technical_agent
+from models import RestaurantContext, InputGuardRailOutput, HandoffData
+from my_agents.menu_agent import menu_agent
 from my_agents.order_agent import order_agent
-from my_agents.billing_agent import billing_agent
+from my_agents.reservation_agent import reservation_agent
 
 
 input_guardrail_agent = Agent(
     name="Input Guardrail Agent",
     instructions="""
-    Ensure the user's request specifically pertains to User Account details, Billing inquiries, Order information, or Technical Support issues, and is not off-topic. If the request is off-topic, return a reason for the tripwire. You can make small conversation with the user, specially at the beginning of the conversation, but don't help with requests that are not related to User Account details, Billing inquiries, Order information, or Technical Support issues.
+    Determine if the user's request is related to a restaurant context.
+    Allowed topics: menu inquiries, food allergies, placing orders, table reservations, operating hours, and general restaurant-related questions.
+    Small talk and greetings are allowed.
+    If the request is completely off-topic (e.g., coding help, politics, unrelated tasks), set is_off_topic to true and provide a reason.
 """,
     output_type=InputGuardRailOutput,
 )
@@ -27,8 +29,8 @@ input_guardrail_agent = Agent(
 
 @input_guardrail
 async def off_topic_guardrail(
-    wrapper: RunContextWrapper[UserAccountContext],
-    agent: Agent[UserAccountContext],
+    wrapper: RunContextWrapper[RestaurantContext],
+    agent: Agent[RestaurantContext],
     input: str,
 ):
     result = await Runner.run(
@@ -44,84 +46,63 @@ async def off_topic_guardrail(
 
 
 def dynamic_triage_agent_instructions(
-    wrapper: RunContextWrapper[UserAccountContext],
-    agent: Agent[UserAccountContext],
+    wrapper: RunContextWrapper[RestaurantContext],
+    agent: Agent[RestaurantContext],
 ):
     return f"""
     {RECOMMENDED_PROMPT_PREFIX}
 
+    You are a warm and welcoming host at our restaurant, assisting {wrapper.context.customer_name}.
+    Always respond in Korean.
 
-    You are a customer support agent. You ONLY help customers with their questions about their User Account, Billing, Orders, or Technical Support.
-    You call customers by their name.
-    
-    The customer's name is {wrapper.context.name}.
-    The customer's email is {wrapper.context.email}.
-    The customer's tier is {wrapper.context.tier}.
-    
-    YOUR MAIN JOB: Classify the customer's issue and route them to the right specialist.
-    
-    ISSUE CLASSIFICATION GUIDE:
-    
-    🔧 TECHNICAL SUPPORT - Route here for:
-    - Product not working, errors, bugs
-    - App crashes, loading issues, performance problems
-    - Feature questions, how-to help
-    - Integration or setup problems
-    - "The app won't load", "Getting error message", "How do I..."
-    
-    💰 BILLING SUPPORT - Route here for:
-    - Payment issues, failed charges, refunds
-    - Subscription questions, plan changes, cancellations
-    - Invoice problems, billing disputes
-    - Credit card updates, payment method changes
-    - "I was charged twice", "Cancel my subscription", "Need a refund"
-    
-    📦 ORDER MANAGEMENT - Route here for:
-    - Order status, shipping, delivery questions
-    - Returns, exchanges, missing items
-    - Tracking numbers, delivery problems
-    - Product availability, reorders
-    - "Where's my order?", "Want to return this", "Wrong item shipped"
-    
-    👤 ACCOUNT MANAGEMENT - Route here for:
-    - Login problems, password resets, account access
-    - Profile updates, email changes, account settings
-    - Account security, two-factor authentication
-    - Account deletion, data export requests
-    - "Can't log in", "Forgot password", "Change my email"
-    
+    YOUR MAIN JOB: Understand what the customer needs and route them to the right specialist.
+
+    ROUTING GUIDE:
+
+    🍽️ MENU AGENT - Route here for:
+    - Questions about today's menu or specific dishes
+    - Ingredient or allergen inquiries
+    - Vegetarian, vegan, or dietary option questions
+    - Dish recommendations
+    - "메뉴 알려줘", "채식 메뉴 있어?", "이 요리 뭐가 들어가?"
+
+    📋 ORDER AGENT - Route here for:
+    - Placing a new food or drink order
+    - Modifying or canceling an existing order
+    - Checking order status
+    - "주문할게요", "~로 주문해줘", "주문 취소하고 싶어"
+
+    📅 RESERVATION AGENT - Route here for:
+    - Making a table reservation
+    - Checking reservation availability
+    - Canceling or modifying a reservation
+    - "예약하고 싶어", "자리 있어?", "예약 취소해줘"
+
     CLASSIFICATION PROCESS:
-    1. Listen to the customer's issue
-    2. Ask clarifying questions if the category isn't clear
-    3. Classify into ONE of the four categories above
-    4. Explain why you're routing them: "I'll connect you with our [category] specialist who can help with [specific issue]"
-    5. Route to the appropriate specialist agent
-    
-    SPECIAL HANDLING:
-    - Premium/Enterprise customers: Mention their priority status when routing
-    - Multiple issues: Handle the most urgent first, note others for follow-up
-    - Unclear issues: Ask 1-2 clarifying questions before routing
+    1. Greet the customer by name warmly
+    2. Listen carefully to their request
+    3. If the intent is clear, route immediately with a friendly explanation
+    4. If unclear, ask ONE clarifying question
+    5. Always say where you're routing them: "메뉴 전문가에게 연결해 드릴게요! 🍽️"
+
+    TONE: Warm, cheerful, and hospitality-focused 🏡
     """
 
-# input data를 받아서 디버깅할 수 있다.
+
 def handle_handoff(
-    wrapper: RunContextWrapper[UserAccountContext],
+    wrapper: RunContextWrapper[RestaurantContext],
     input_data: HandoffData,
 ):
-
     with st.sidebar:
-        st.write(
-            f"""
-            Handing off to {input_data.to_agent_name}
-            Reason: {input_data.reason}
-            Issue Type: {input_data.issue_type}
-            Description: {input_data.issue_description}
-        """
-        )
+        st.markdown("---")
+        st.markdown("### 🔀 Handoff 발생")
+        st.write(f"**전달 대상:** {input_data.to_agent_name}")
+        st.write(f"**이유:** {input_data.reason}")
+        st.write(f"**유형:** {input_data.issue_type}")
+        st.write(f"**설명:** {input_data.issue_description}")
 
 
 def make_handoff(agent):
-
     return handoff(
         agent=agent,
         on_handoff=handle_handoff,
@@ -136,16 +117,9 @@ triage_agent = Agent(
     input_guardrails=[
         off_topic_guardrail,
     ],
-    # tools=[
-    #     technical_agent.as_tool(
-    #         tool_name="Technical Help Tool",
-    #         tool_description="Use this when the user needs tech support."
-    #     )
-    # ]
     handoffs=[
-        make_handoff(technical_agent),
-        make_handoff(billing_agent),
-        make_handoff(account_agent),
+        make_handoff(menu_agent),
         make_handoff(order_agent),
+        make_handoff(reservation_agent),
     ],
 )
