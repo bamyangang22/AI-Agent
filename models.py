@@ -10,7 +10,14 @@ class RestaurantContext(BaseModel):
 
 class InputGuardRailOutput(BaseModel):
     is_off_topic: bool
+    has_inappropriate_language: bool
     reason: Optional[str] = None
+
+
+class OutputGuardrailOutput(BaseModel):
+    is_inappropriate: bool
+    reason: Optional[str] = None
+    safe_response: Optional[str] = None
 
 
 class HandoffData(BaseModel):

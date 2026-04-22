@@ -147,3 +147,100 @@ def make_reservation(
 def cancel_reservation(wrapper: RunContextWrapper[RestaurantContext], reservation_id: str) -> str:
     """예약을 취소합니다."""
     return f"✅ 예약 [{reservation_id}]이 취소되었습니다. 다음에 또 방문해 주세요!"
+
+
+# ── Complaints Agent Tools ────────────────────────────────
+
+@function_tool
+def acknowledge_complaint(
+    wrapper: RunContextWrapper[RestaurantContext],
+    complaint_summary: str,
+) -> str:
+    """고객의 불만을 공식적으로 접수하고 공감을 표합니다."""
+    customer_name = wrapper.context.customer_name
+    complaint_id = f"CMP-{abs(hash(complaint_summary + customer_name)) % 9000 + 1000}"
+    return f"""
+    📋 불만 접수 완료
+    - 접수 번호: {complaint_id}
+    - 고객명: {customer_name}
+    - 불만 내용: {complaint_summary}
+    - 상태: 검토 중
+    고객님의 소중한 의견을 진심으로 받아들이겠습니다.
+    """
+
+
+@function_tool
+def offer_resolution(
+    wrapper: RunContextWrapper[RestaurantContext],
+    resolution_type: str,
+    details: str = "",
+) -> str:
+    """
+    고객에게 해결책을 제시합니다.
+    resolution_type: 'refund'(환불), 'discount'(할인), 'manager_callback'(매니저 콜백)
+    """
+    customer_name = wrapper.context.customer_name
+    resolutions = {
+        "refund": f"""
+    💰 환불 처리 안내
+    - 고객명: {customer_name}
+    - 처리 방법: 결제 수단으로 전액 환불
+    - 처리 기간: 영업일 기준 3~5일
+    - 참고사항: {details if details else '추가 문의는 매장으로 연락 주세요.'}
+    불편을 드려 진심으로 사과드립니다. 🙏
+        """,
+        "discount": f"""
+    🎟️ 다음 방문 할인 쿠폰 발급
+    - 고객명: {customer_name}
+    - 할인율: 50% 할인
+    - 유효기간: 발급일로부터 30일
+    - 쿠폰 코드: SORRY-{abs(hash(customer_name)) % 9000 + 1000}
+    - 참고사항: {details if details else '다음 방문 시 직원에게 코드를 제시해 주세요.'}
+    더 나은 경험을 제공해 드리겠습니다. 😊
+        """,
+        "manager_callback": f"""
+    📞 매니저 콜백 요청 접수
+    - 고객명: {customer_name}
+    - 요청 내용: {details if details else '고객 불만 처리 관련 상담'}
+    - 예상 연락 시간: 30분 이내
+    - 담당자: 매장 매니저
+    곧 매니저가 직접 연락드릴 예정입니다.
+        """,
+    }
+    return resolutions.get(
+        resolution_type,
+        "⚠️ 올바른 해결책 유형을 선택해 주세요: refund, discount, manager_callback"
+    )
+
+
+@function_tool
+def escalate_to_manager(
+    wrapper: RunContextWrapper[RestaurantContext],
+    issue_description: str,
+    severity: str = "medium",
+) -> str:
+    """
+    심각한 문제를 매니저에게 에스컬레이션합니다.
+    severity: 'low', 'medium', 'high'
+    """
+    customer_name = wrapper.context.customer_name
+    table = wrapper.context.table_number or "미지정"
+
+    severity_labels = {
+        "low": "🟡 낮음",
+        "medium": "🟠 보통",
+        "high": "🔴 높음 (즉시 대응 필요)",
+    }
+    severity_label = severity_labels.get(severity, "🟠 보통")
+    escalation_id = f"ESC-{abs(hash(issue_description + customer_name)) % 9000 + 1000}"
+
+    return f"""
+    🚨 매니저 에스컬레이션 완료
+    - 에스컬레이션 ID: {escalation_id}
+    - 고객명: {customer_name}
+    - 테이블: {table}번
+    - 심각도: {severity_label}
+    - 이슈 내용: {issue_description}
+    - 상태: 매니저에게 즉시 전달됨
+    매니저가 신속히 조치를 취할 예정입니다. 잠시만 기다려 주세요.
+    """

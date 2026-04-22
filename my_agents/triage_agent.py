@@ -13,15 +13,33 @@ from models import RestaurantContext, InputGuardRailOutput, HandoffData
 from my_agents.menu_agent import menu_agent
 from my_agents.order_agent import order_agent
 from my_agents.reservation_agent import reservation_agent
+from my_agents.complaint_agent import complaint_agent
 
+
+# ── Input Guardrail ───────────────────────────────────────
 
 input_guardrail_agent = Agent(
     name="Input Guardrail Agent",
     instructions="""
-    Determine if the user's request is related to a restaurant context.
-    Allowed topics: menu inquiries, food allergies, placing orders, table reservations, operating hours, and general restaurant-related questions.
-    Small talk and greetings are allowed.
-    If the request is completely off-topic (e.g., coding help, politics, unrelated tasks), set is_off_topic to true and provide a reason.
+    Evaluate the user's message for a restaurant chatbot context.
+
+    Set is_off_topic=true if the message is completely unrelated to restaurant services.
+    Allowed topics: menu inquiries, food allergies, placing orders, table reservations,
+    operating hours, complaints about food/service, and general restaurant-related questions.
+    Small talk and greetings are always allowed.
+    Off-topic examples: coding help, politics, math problems, unrelated personal questions.
+
+    Set has_inappropriate_language=true if the message contains any of the following:
+    - Profanity or swear words (욕설)
+    - Hate speech or discriminatory language
+    - Sexually explicit content
+    - Threatening or violent language
+    - Severe personal insults directed at staff
+
+    Note: Expressing frustration or complaints about food/service is NOT inappropriate
+    (e.g., "음식이 별로였어", "직원이 불친절했어" → allowed, route to Complaints Agent).
+
+    Always provide a reason explaining your decision.
 """,
     output_type=InputGuardRailOutput,
 )
@@ -39,11 +57,16 @@ async def off_topic_guardrail(
         context=wrapper.context,
     )
 
+    final = result.final_output
+    is_blocked = final.is_off_topic or final.has_inappropriate_language
+
     return GuardrailFunctionOutput(
-        output_info=result.final_output,
-        tripwire_triggered=result.final_output.is_off_topic,
+        output_info=final,
+        tripwire_triggered=is_blocked,
     )
 
+
+# ── Triage Agent ──────────────────────────────────────────
 
 def dynamic_triage_agent_instructions(
     wrapper: RunContextWrapper[RestaurantContext],
@@ -78,12 +101,23 @@ def dynamic_triage_agent_instructions(
     - Canceling or modifying a reservation
     - "예약하고 싶어", "자리 있어?", "예약 취소해줘"
 
+    😤 COMPLAINTS AGENT - Route here for:
+    - Dissatisfaction with food quality or taste
+    - Poor service experience
+    - Requests for refund or compensation
+    - Any expression of disappointment or complaint
+    - "별로였어", "불친절했어", "환불해줘", "너무 실망했어", "음식이 이상해"
+
     CLASSIFICATION PROCESS:
     1. Greet the customer by name warmly
     2. Listen carefully to their request
     3. If the intent is clear, route immediately with a friendly explanation
     4. If unclear, ask ONE clarifying question
-    5. Always say where you're routing them: "메뉴 전문가에게 연결해 드릴게요! 🍽️"
+    5. Always announce where you're routing them:
+       - "메뉴 전문가에게 연결해 드릴게요! 🍽️"
+       - "주문 담당자에게 연결해 드릴게요! 📋"
+       - "예약 담당자에게 연결해 드릴게요! 📅"
+       - "불만 처리 담당자에게 연결해 드릴게요! 😤"
 
     TONE: Warm, cheerful, and hospitality-focused 🏡
     """
@@ -121,5 +155,6 @@ triage_agent = Agent(
         make_handoff(menu_agent),
         make_handoff(order_agent),
         make_handoff(reservation_agent),
+        make_handoff(complaint_agent),
     ],
 )

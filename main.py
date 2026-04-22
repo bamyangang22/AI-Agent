@@ -3,7 +3,12 @@ import asyncio
 import streamlit as st
 from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
-from agents import Runner, SQLiteSession, InputGuardrailTripwireTriggered
+from agents import (
+    Runner,
+    SQLiteSession,
+    InputGuardrailTripwireTriggered,
+    OutputGuardrailTripwireTriggered,
+)
 from models import RestaurantContext
 from my_agents.triage_agent import triage_agent
 
@@ -84,6 +89,8 @@ async def run_agent(message: str):
                 context=restaurant_ctx,
             )
 
+            # OutputGuardrailTripwireTriggered는 stream_events() 내부에서
+            # 발생하므로 루프 안에서도 잡을 수 있도록 전체를 try로 감쌈
             async for event in stream.stream_events():
                 if event.type == "raw_response_event":
                     if event.data.type == "response.output_text.delta":
@@ -99,11 +106,35 @@ async def run_agent(message: str):
                         st.session_state["text_placeholder"] = text_placeholder
                         response = ""
 
-        except InputGuardrailTripwireTriggered:
-            st.warning("⚠️ 저는 레스토랑 관련 질문만 도와드릴 수 있습니다. 메뉴, 주문, 예약에 대해 물어봐 주세요!")
+        except InputGuardrailTripwireTriggered as e:
+            # warning() 대신 write()로 일반 채팅 말풍선 안에 표시
+            guardrail_output = e.guardrail_result.output.output_info
+            if guardrail_output.has_inappropriate_language:
+                text_placeholder.write(
+                    "저는 레스토랑 관련 질문에 대해서만 도와드리고 있어요. "
+                    "정중한 표현으로 메뉴, 주문, 예약, 불만 사항에 대해 물어봐 주세요. 😊"
+                )
+            else:
+                text_placeholder.write(
+                    "저는 레스토랑 관련 질문에 대해서만 도와드리고 있어요. "
+                    "메뉴를 확인하거나, 예약하거나, 음식을 주문할 수 있어요."
+                )
+
+        except OutputGuardrailTripwireTriggered as e:
+            # safe_response가 있으면 사용, 없으면 기본 안내 메시지
+            guardrail_output = e.guardrail_result.output.output_info
+            safe_msg = (
+                guardrail_output.safe_response
+                if guardrail_output.safe_response
+                else (
+                    "죄송합니다. 보다 적절한 방식으로 도움을 드리겠습니다. "
+                    "불편하신 점을 다시 말씀해 주시겠어요? 🙏"
+                )
+            )
+            text_placeholder.write(safe_msg)
 
 
-message = st.chat_input("무엇을 도와드릴까요? (예: 메뉴 알려줘 / 주문할게요 / 예약하고 싶어)")
+message = st.chat_input("무엇을 도와드릴까요? (예: 메뉴 알려줘 / 주문할게요 / 예약하고 싶어 / 불만 있어요)")
 
 if message:
     with st.chat_message("human"):
