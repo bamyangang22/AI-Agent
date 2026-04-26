@@ -48,7 +48,8 @@ with st.sidebar:
     st.write(f"**인원:** {restaurant_ctx.party_size}명")
     st.markdown("---")
     st.markdown("## 🤖 현재 에이전트")
-    st.write(f"`{st.session_state['agent'].name}`")
+    agent_placeholder = st.empty()
+    agent_placeholder.write(f"`{st.session_state['agent'].name}`") 
     st.markdown("---")
     if st.button("🗑️ 대화 초기화"):
         asyncio.run(session.clear_session())
@@ -56,7 +57,6 @@ with st.sidebar:
         st.rerun()
     st.markdown("### 📜 대화 기록")
     st.write(asyncio.run(session.get_items()))
-
 
 async def paint_history():
     messages = await session.get_items()
@@ -75,7 +75,7 @@ async def paint_history():
 asyncio.run(paint_history())
 
 
-async def run_agent(message: str):
+async def run_agent(message: str, agent_placeholder):
     with st.chat_message("ai"):
         text_placeholder = st.empty()
         response = ""
@@ -100,10 +100,10 @@ async def run_agent(message: str):
                 elif event.type == "agent_updated_stream_event":
                     if st.session_state["agent"].name != event.new_agent.name:
                         old_agent_name = st.session_state["agent"].name
-                        st.info(f"🔀 **{old_agent_name}** → **{event.new_agent.name}** 으로 연결합니다...")
                         st.session_state["agent"] = event.new_agent
+                        agent_placeholder.write(f"`{event.new_agent.name}`")
+                        text_placeholder.info(f"🔀 **{old_agent_name}** → **{event.new_agent.name}** 으로 연결합니다...")  
                         text_placeholder = st.empty()
-                        st.session_state["text_placeholder"] = text_placeholder
                         response = ""
 
         except InputGuardrailTripwireTriggered as e:
@@ -139,4 +139,4 @@ message = st.chat_input("무엇을 도와드릴까요? (예: 메뉴 알려줘 / 
 if message:
     with st.chat_message("human"):
         st.write(message)
-    asyncio.run(run_agent(message))
+    asyncio.run(run_agent(message, agent_placeholder))
