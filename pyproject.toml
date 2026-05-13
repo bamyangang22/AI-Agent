@@ -12,6 +12,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite==2.0.11",
     "langgraph-cli[inmem]==0.4.0",
     "python-dotenv==1.1.1",
+    "streamlit>=1.45.0",
 ]
 
 [dependency-groups]
